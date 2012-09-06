@@ -5,6 +5,8 @@ import threading
 import signal
 import zephyr
 import sys
+import select
+import Queue
 
 USER = 'partychat@nelhage.com'
 PASS = '7d6sqHKdDlBv'
@@ -14,10 +16,16 @@ SHUTDOWN = False
 JOIN_ALERT = re.compile(r"""^You have joined '([^']+)' with the alias '([^']+)'$""")
 CHAT_MESSAGE = re.compile(r"""^\[([^]]+)\]\s*(.*)$""", re.S|re.M)
 
-CHAT_MAP = [('nelhage-test', 'partychat-test')]
+CHAT_MAP = [('nelhage-test', 'partychat-test'),
+            ('dfrpg', 'dfrpg'),
+            # ('nothing.reasonable.happens.here', 'nothing-reasonable-happens-here')
+            ]
 
 jabber_chats = dict(CHAT_MAP)
 zephyr_classes = dict(reversed(c) for c in CHAT_MAP)
+
+from_zephyr_q = Queue.Queue()
+from_jabber_q = Queue.Queue()
 
 class BridgeBot(jabberbot.JabberBot):
     def __init__(self, user, pw):
@@ -35,15 +43,17 @@ class BridgeBot(jabberbot.JabberBot):
         from_ = str(mess.getFrom())
         chat = from_[:from_.rindex('@')]
         body = mess.getBody()
+        print "JABBER: %s: %s" % (from_, body)
         m = JOIN_ALERT.search(body)
         if m:
+            self.send(mess.getFrom(), "/nick z", mess)
             self.send(mess.getFrom(), "Joining the chat...", mess)
             return
         m = CHAT_MESSAGE.search(body)
         if m:
             who = m.group(1)
             body = m.group(2)
-            print "CHAT: [%s] %s" % (who, body,)
+            from_jabber_q.put((chat, who, body))
         else:
             print "[%s] %s" % (mess.getFrom(), mess.getBody())
 
@@ -56,9 +66,26 @@ class BridgeBot(jabberbot.JabberBot):
         else:
             super(BridgeBot, self).callback_presence(conn, presence)
 
+    def idle_proc(self):
+        super(BridgeBot, self).idle_proc()
+        if SHUTDOWN:
+            self.quit()
+        while True:
+            try:
+                m = from_zephyr_q.get(False)
+            except Queue.Empty:
+                return
+            (cls, sender, msg) = m
+            if cls not in zephyr_classes: return
+            self.send(zephyr_classes[cls] + '@im.partych.at', "[%s] %s" % (sender, msg))
+
+    def on_connect(self):
+        for who in jabber_chats.values():
+            self.send(who + '@im.partych.at', '/nick z')
+
 def run_jabber():
     bot = BridgeBot(USER, PASS)
-    bot.serve_forever()
+    bot.serve_forever(connect_callback = bot.on_connect)
 
 def run_zephyr():
     zephyr.init()
@@ -66,8 +93,30 @@ def run_zephyr():
     for c in CHAT_MAP:
         subs.add((c[1], '*', ''))
     while not SHUTDOWN:
-        note = zephyr.receive(True)
-        print note
+        while True:
+            try:
+                m = from_jabber_q.get(False)
+            except Queue.Empty:
+                break
+            (src, sender, msg) = m
+            if src not in jabber_chats:
+                continue
+            note = zephyr.ZNotice()
+            note.fields = [src, msg]
+            note.sender = sender
+            note.auth   = False
+            note.cls    = jabber_chats[src]
+            note.instance = ''
+            note.opcode = 'auto'
+            note.send()
+
+        note = zephyr.receive(False)
+        if note:
+            print "ZEPHYR: %s[%s]: %s" % (note.sender, note.opcode, note.fields[1] if len(note.fields) > 1 else '')
+            if note.opcode.lower() not in ('auto', 'ping'):
+                from_zephyr_q.put((note.cls, note.sender.split('@')[0], note.fields[1] if len(note.fields) > 1 else ''))
+        else:
+            select.select([zephyr._z.getFD()], [], [], 1)
 
 def main():
     global SHUTDOWN
@@ -76,7 +125,8 @@ def main():
     zephyr_thread = threading.Thread(target = run_zephyr)
 
     threads = [jabber_thread, zephyr_thread]
-    for t in threads: t.start()
+    for t in threads:
+        t.start()
 
     while True:
         try:
@@ -85,7 +135,8 @@ def main():
             break
     SHUTDOWN = True
 
-    for t in threads: t.join()
+    for t in threads:
+        t.join()
 
     return 0
 
