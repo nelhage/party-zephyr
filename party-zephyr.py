@@ -7,25 +7,26 @@ import zephyr
 import sys
 import select
 import Queue
-
-USER = 'partychat@nelhage.com'
-PASS = '7d6sqHKdDlBv'
+import yaml
+import os.path
 
 SHUTDOWN = False
 
 JOIN_ALERT = re.compile(r"""^You have joined '([^']+)' with the alias '([^']+)'$""")
 CHAT_MESSAGE = re.compile(r"""^\[([^]]+)\]\s*(.*)$""", re.S|re.M)
 
-CHAT_MAP = [('nelhage-test', 'partychat-test'),
-            ('dfrpg', 'dfrpg'),
-            # ('nothing.reasonable.happens.here', 'nothing-reasonable-happens-here')
-            ]
+CONF = yaml.safe_load(open(os.path.join(os.path.dirname(__file__),
+                                        'partychat.yml')))
+jabber_chats = CONF['chats']
+zephyr_classes = dict(map(reversed, jabber_chats.items()))
 
-jabber_chats = dict(CHAT_MAP)
-zephyr_classes = dict(reversed(c) for c in CHAT_MAP)
+USER = CONF['creds']['user']
+PASS = CONF['creds']['pass']
 
 from_zephyr_q = Queue.Queue()
 from_jabber_q = Queue.Queue()
+
+PARTYCHAT_HOST = 'im.partych.at'
 
 class BridgeBot(jabberbot.JabberBot):
     def __init__(self, user, pw):
@@ -37,8 +38,18 @@ class BridgeBot(jabberbot.JabberBot):
 #         self.log.addHandler(chandler)
 #         self.log.setLevel(logging.DEBUG)
 
+    def chat_to_jid(self, chat):
+        return chat + '@' + PARTYCHAT_HOST
+
+    def joined_chat(self, chat):
+        self.send(self.chat_to_jid(chat), "/nick z")
+        if chat in jabber_chats:
+            self.send(self.chat_to_jid(chat),
+                      "This chat is now being mirrored to -c %s" %
+                      (jabber_chats[chat],))
+
     def callback_message(self, conn, mess):
-        if not str(mess.getFrom()).endswith('@im.partych.at'):
+        if not mess.getFrom().getDomain() == PARTYCHAT_HOST:
             return
         from_ = str(mess.getFrom())
         chat = from_[:from_.rindex('@')]
@@ -46,8 +57,7 @@ class BridgeBot(jabberbot.JabberBot):
         print "JABBER: %s: %s" % (from_, body)
         m = JOIN_ALERT.search(body)
         if m:
-            self.send(mess.getFrom(), "/nick z", mess)
-            self.send(mess.getFrom(), "Joining the chat...", mess)
+            self.joined_chat(chat)
             return
         m = CHAT_MESSAGE.search(body)
         if m:
@@ -77,11 +87,11 @@ class BridgeBot(jabberbot.JabberBot):
                 return
             (cls, sender, msg) = m
             if cls not in zephyr_classes: return
-            self.send(zephyr_classes[cls] + '@im.partych.at', "[%s] %s" % (sender, msg))
+            self.send(self.chat_to_jid(zephyr_classes[cls]), "[%s] %s" % (sender, msg))
 
     def on_connect(self):
         for who in jabber_chats.values():
-            self.send(who + '@im.partych.at', '/nick z')
+            self.send(self.chat_to_jid(who), '/nick z')
 
 def run_jabber():
     bot = BridgeBot(USER, PASS)
@@ -90,8 +100,9 @@ def run_jabber():
 def run_zephyr():
     zephyr.init()
     subs = zephyr.Subscriptions()
-    for c in CHAT_MAP:
-        subs.add((c[1], '*', ''))
+    logging.info("Subscribing to: " + ','.join(zephyr_classes.keys()))
+    for c in zephyr_classes.keys():
+        subs.add((c, '*', ''))
     while not SHUTDOWN:
         while True:
             try:
@@ -112,7 +123,7 @@ def run_zephyr():
 
         note = zephyr.receive(False)
         if note:
-            print "ZEPHYR: %s[%s]: %s" % (note.sender, note.opcode, note.fields[1] if len(note.fields) > 1 else '')
+            print "ZEPHYR: %s/%s[%s]: %s" % (note.sender, note.cls, note.opcode, note.fields[1] if len(note.fields) > 1 else '')
             if note.opcode.lower() not in ('auto', 'ping'):
                 from_zephyr_q.put((note.cls, note.sender.split('@')[0], note.fields[1] if len(note.fields) > 1 else ''))
         else:
@@ -120,6 +131,8 @@ def run_zephyr():
 
 def main():
     global SHUTDOWN
+
+    logging.basicConfig(level = logging.INFO)
 
     jabber_thread = threading.Thread(target = run_jabber)
     zephyr_thread = threading.Thread(target = run_zephyr)
