@@ -9,6 +9,7 @@ import select
 import Queue
 import yaml
 import os.path
+import time
 
 SHUTDOWN = False
 
@@ -93,7 +94,13 @@ class BridgeBot(jabberbot.JabberBot):
 
 def run_jabber():
     bot = BridgeBot(USER, PASS)
-    bot.serve_forever(connect_callback = bot.on_connect)
+    while True:
+        try:
+            logging.info("Connecting to Jabber...")
+            bot.serve_forever(connect_callback = bot.on_connect)
+        except IOError, e:
+            logging.error("IOError in Jabber thread", exc_info=True)
+            time.sleep(60)
 
 def run_zephyr():
     zephyr.init()
