@@ -54,7 +54,7 @@ class BridgeBot(jabberbot.JabberBot):
         from_ = str(mess.getFrom())
         chat = from_[:from_.rindex('@')]
         body = mess.getBody()
-        print "JABBER: %s: %s" % (from_, body)
+        logging.debug("JABBER: %s: %s", from_, body)
         m = JOIN_ALERT.search(body)
         if m:
             self.joined_chat(chat)
@@ -64,8 +64,6 @@ class BridgeBot(jabberbot.JabberBot):
             who = m.group(1)
             body = m.group(2)
             from_jabber_q.put((chat, who, body))
-        else:
-            print "[%s] %s" % (mess.getFrom(), mess.getBody())
 
     def callback_presence(self, conn, presence):
         jid, type_, show, status = presence.getFrom(), \
@@ -123,16 +121,20 @@ def run_zephyr():
 
         note = zephyr.receive(False)
         if note:
-            print "ZEPHYR: %s/%s[%s]: %s" % (note.sender, note.cls, note.opcode, note.fields[1] if len(note.fields) > 1 else '')
+            body = note.fields[1] if len(note.fields) > 1 else ''
+            logging.debug("ZEPHYR: %s/%s[%s]: %s",
+                          note.sender, note.cls, note.opcode,
+                          body)
             if note.opcode.lower() not in ('auto', 'ping'):
-                from_zephyr_q.put((note.cls, note.sender.split('@')[0], note.fields[1] if len(note.fields) > 1 else ''))
+                from_zephyr_q.put((note.cls, note.sender.split('@')[0],
+                                   body))
         else:
             select.select([zephyr._z.getFD()], [], [], 1)
 
 def main():
     global SHUTDOWN
 
-    logging.basicConfig(level = logging.INFO)
+    logging.basicConfig(level = logging.DEBUG)
 
     jabber_thread = threading.Thread(target = run_jabber)
     zephyr_thread = threading.Thread(target = run_zephyr)
