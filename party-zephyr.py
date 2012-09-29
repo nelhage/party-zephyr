@@ -94,7 +94,7 @@ class BridgeBot(jabberbot.JabberBot):
 
 def run_jabber():
     bot = BridgeBot(USER, PASS)
-    while True:
+    while not SHUTDOWN:
         try:
             logging.info("Connecting to Jabber...")
             bot.serve_forever(connect_callback = bot.on_connect)
