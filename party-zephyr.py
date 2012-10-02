@@ -93,10 +93,10 @@ class BridgeBot(jabberbot.JabberBot):
             self.send(self.chat_to_jid(who), '/nick z')
 
 def run_jabber():
-    bot = BridgeBot(USER, PASS)
     while not SHUTDOWN:
         try:
             logging.info("Connecting to Jabber...")
+            bot = BridgeBot(USER, PASS)
             bot.serve_forever(connect_callback = bot.on_connect)
         except IOError, e:
             logging.error("IOError in Jabber thread", exc_info=True)
