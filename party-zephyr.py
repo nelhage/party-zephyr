@@ -127,7 +127,7 @@ def run_zephyr():
             note.auth   = False
             note.cls    = jabber_chats[src]
             note.instance = ''
-            note.opcode = 'auto'
+            note.opcode = 'jabber'
             note.send()
 
         note = zephyr.receive(False)
@@ -136,7 +136,7 @@ def run_zephyr():
             logging.debug("ZEPHYR: %s/%s[%s]: %s",
                           note.sender, note.cls, note.opcode,
                           body)
-            if note.opcode.lower() not in ('auto', 'ping'):
+            if note.opcode.lower() not in ('jabber', 'ping'):
                 from_zephyr_q.put((note.cls, note.sender.split('@')[0],
                                    body))
         else:
