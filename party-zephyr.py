@@ -62,11 +62,11 @@ class BridgeBot(jabberbot.JabberBot):
             return
         m = CHAT_MESSAGE.search(body)
         if m:
+            who = m.group(1)
             if who == 'z':
                 # If we get a message from ourself echoed back,
                 # squelch it.
                 return
-            who = m.group(1)
             body = m.group(2)
             from_jabber_q.put((chat, who, body))
 
