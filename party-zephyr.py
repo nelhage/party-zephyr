@@ -145,7 +145,8 @@ def run_zephyr():
 def main():
     global SHUTDOWN
 
-    logging.basicConfig(level = logging.DEBUG)
+    logging.basicConfig(level = logging.DEBUG,
+                        format = "[%(asctime)-15s] %(levelname)s:%(name)s: %(message)s")
 
     jabber_thread = threading.Thread(target = run_jabber)
     zephyr_thread = threading.Thread(target = run_zephyr)
