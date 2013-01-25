@@ -102,7 +102,7 @@ def run_jabber():
             logging.info("Connecting to Jabber...")
             bot = BridgeBot(USER, PASS)
             bot.serve_forever(connect_callback = bot.on_connect)
-        except IOError, e:
+        except Exception, e:
             logging.error("IOError in Jabber thread", exc_info=True)
             time.sleep(60)
 
