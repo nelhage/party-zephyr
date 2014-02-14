@@ -16,8 +16,9 @@ SHUTDOWN = False
 JOIN_ALERT = re.compile(r"""^You have joined '([^']+)' with the alias '([^']+)'$""")
 CHAT_MESSAGE = re.compile(r"""^\[([^]]+)\]\s*(.*)$""", re.S|re.M)
 
-CONF = yaml.safe_load(open(os.path.join(os.path.dirname(__file__),
-                                        'partychat.yml')))
+CONF_FILE = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__),
+                                                               'partychat.yml')
+CONF = yaml.safe_load(open(CONF_FILE))
 jabber_chats = CONF['chats']
 zephyr_classes = dict(map(reversed, jabber_chats.items()))
 
