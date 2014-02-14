@@ -1,5 +1,5 @@
 xmpppy
 jabberbot
-zephyr
+pyzephyr
 pyyaml
 pydns
