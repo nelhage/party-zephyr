@@ -1,0 +1,5 @@
+xmpppy
+jabberbot
+zephyr
+pyyaml
+pydns
