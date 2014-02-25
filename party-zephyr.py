@@ -10,6 +10,7 @@ import Queue
 import yaml
 import os.path
 import time
+import xmpp
 
 SHUTDOWN = False
 
@@ -29,9 +30,11 @@ from_zephyr_q = Queue.Queue()
 from_jabber_q = Queue.Queue()
 
 PARTYCHAT_HOST = 'im.partych.at'
+KEEPALIVE_INTERVAL = 60
 
 class BridgeBot(jabberbot.JabberBot):
     def __init__(self, user, pw):
+        self.last_keepalive = time.time()
         super(BridgeBot, self).__init__(user, pw)
 
 #         chandler = logging.StreamHandler()
@@ -84,6 +87,10 @@ class BridgeBot(jabberbot.JabberBot):
         super(BridgeBot, self).idle_proc()
         if SHUTDOWN:
             self.quit()
+        if time.time() - self.last_keepalive > KEEPALIVE_INTERVAL:
+            logging.debug("Sending jabber keepalive ping.")
+            self._send_status()
+            self.last_keepalive = time.time()
         while True:
             try:
                 m = from_zephyr_q.get(False)
